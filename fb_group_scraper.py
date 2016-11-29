@@ -84,7 +84,8 @@ def process_post(post, parent_id=''):
         parent_id = 'https://www.facebook.com/groups/%s/permalink/%s' % \
             (GROUP_ID, post_id[len(GROUP_ID)+1:])
         likes = post['likes']['summary']['total_count']
-        comments = len(post['comments']['data'])
+        comments = 0 if 'comments' not in post.keys() else \
+            len(post['comments']['data'])
         kind = post['type']
 
         if kind != 'status':
@@ -98,7 +99,8 @@ def process_post(post, parent_id=''):
     # If it's a comment
     else:
         likes = post['like_count']
-        comments = post['comment_count']
+        comments = 0 if 'comment_count' not in post.keys() else \
+            post['comment_count']
         kind = 'comment'
         link = ''
 
