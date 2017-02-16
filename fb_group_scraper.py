@@ -87,14 +87,8 @@ def process_post(post, parent_id=''):
         comments = 0 if 'comments' not in post.keys() else \
             len(post['comments']['data'])
         kind = post['type']
-
-        if kind != 'status':
-            if 'name' in post.keys():
-                link = format_string(post['name'] + ': ' + post['link'])
-            else:
-                link = format_string(post['link'])
-        else:
-            link = ''
+        link = '' if 'link' not in post.keys() else \
+            format_string(post['link'])
 
     # If it's a comment
     else:
