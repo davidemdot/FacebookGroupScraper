@@ -1,32 +1,37 @@
 #!/usr/bin/env python
 
-"""Scraper for a Facebook group."""
-
-__author__ = "David Mendez"
-__email__ = "hello@davidemdot.com"
-
+"""Scraper for a Facebook group.
+   David Mendez <hello@davidemdot.com>"""
 
 import csv
 import datetime
 import json
 import sys
-import urllib
+import time
 import urllib2
 
 
 def request(url):
     """Try to open and read an URL.
     """
-    try:
-        req = urllib2.Request(url)
-        response = urllib2.urlopen(req).read()
+    done = False
+    req = urllib2.Request(url)
 
-    except urllib2.HTTPError, err:
-        if err.code == 400:
-            print '\nError. Please, check the group id and the access token.\n'
-        sys.exit(2)
+    while done is False:
+        try:
+            response = urllib2.urlopen(req)
+            if response.getcode() == 200:
+                done = True
+        except Exception, err:
+            if err.code == 400:
+                print '*** Please, check the group id and the access token.\n'
+                sys.exit(2)
+            else:
+                print '*** %s. Retrying...' % err
+                time.sleep(3)
 
-    return response
+    return response.read()
+
 
 def get_group_data():
     """Build the URL to ask for threads and comments data.
@@ -35,12 +40,13 @@ def get_group_data():
     url += 'id,created_time,from,message,type,likes.limit(0).summary(true),'
     url += 'link,name,comments{id,created_time,from,message,comment_count,'
     url += 'like_count,attachment,comments{id,created_time,from,message,'
-    url += 'like_count,attachment}}&limit=100&access_token=%s' % ACCESS_TOKEN
+    url += 'like_count,attachment}}&limit=50&access_token=%s' % ACCESS_TOKEN
 
     return json.loads(request(url))
 
+
 def format_string(text):
-    """ Format a string in a good way.
+    """Format a string in a good way.
     """
     return ' '.join(
         text.translate({
@@ -53,6 +59,7 @@ def format_string(text):
             0xD: 0x20
         }).encode('utf-8').split())
 
+
 def format_date(date, style):
     """Format a date in the selected way.
     """
@@ -61,13 +68,6 @@ def format_date(date, style):
     elif style == 1:
         return date.strftime('%H:%M:%S')
 
-def extract_fb_url(url):
-    """Remove the referral URL from Facebook in a link.
-    """
-    url = url.encode('ascii')
-    url = url[int(url.find('l.php?u='))+8:int(url.find('&h='))]
-
-    return urllib.unquote(url)
 
 def process_post(post, parent_id=''):
     """Process the data from a thread or a comment.
@@ -87,8 +87,8 @@ def process_post(post, parent_id=''):
         comments = 0 if 'comments' not in post.keys() else \
             len(post['comments']['data'])
         kind = post['type']
-        link = '' if 'link' not in post.keys() else \
-            format_string(post['link'])
+        message += '' if 'link' not in post.keys() else \
+            ' [' + format_string(post['link']) + ']'
 
     # If it's a comment
     else:
@@ -96,7 +96,6 @@ def process_post(post, parent_id=''):
         comments = 0 if 'comment_count' not in post.keys() else \
             post['comment_count']
         kind = 'comment'
-        link = ''
 
         if 'attachment' in post.keys():
             if 'type' in post['attachment']:
@@ -106,11 +105,9 @@ def process_post(post, parent_id=''):
                 kind = 'video'
             elif kind.endswith('image_share'):
                 kind = 'image'
-
-            link = '' if 'title' not in post['attachment'] else \
-                format_string(post['attachment']['title']) + ': '
-            link += '' if 'url' not in post['attachment'] else \
-                extract_fb_url(format_string(post['attachment']['url']))
+            elif kind == 'photo':
+                message += '' if 'url' not in post['attachment'] else \
+                    ' [' + format_string(post['attachment']['url']) + ']'
 
     return (str(post_id),
             str(parent_id),
@@ -118,9 +115,9 @@ def process_post(post, parent_id=''):
             author,
             message,
             kind,
-            link,
             likes,
             comments)
+
 
 def get_comments(thread, output):
     """Get all the comments and subcomments from a thread.
@@ -156,6 +153,7 @@ def get_comments(thread, output):
 
     return num_comments
 
+
 def write_csv():
     """Write the categorized data in a CSV file.
     """
@@ -167,7 +165,6 @@ def write_csv():
                          'author',
                          'message',
                          'kind',
-                         'link',
                          'likes',
                          'comments'])
 
@@ -199,10 +196,11 @@ def write_csv():
 
         return (num_threads, num_comments)
 
+
 def main():
     """Main method.
     """
-    print '\n(%s) Getting the last %d threads from FaceBook group #%s\n' % \
+    print '\n(%s) Getting the last %d threads from Facebook group #%s\n' % \
         (format_date(datetime.datetime.now(), 1), MAX_THREADS, GROUP_ID)
 
     num_threads, num_comments = write_csv()
@@ -215,7 +213,7 @@ if __name__ == '__main__':
     try:
         GROUP_ID = str(int(sys.argv[1]))
         ACCESS_TOKEN = sys.argv[2]
-        MAX_THREADS = int(sys.argv[3]) if len(sys.argv) > 3 else 100
+        MAX_THREADS = int(sys.argv[3]) if len(sys.argv) > 3 else 250
 
     except (IndexError, ValueError), err:
         print '\nError: %s' % err
