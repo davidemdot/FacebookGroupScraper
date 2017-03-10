@@ -14,13 +14,13 @@ import urllib2
 def request(url):
     """Try to open and read an URL.
     """
-    done = False
     req = urllib2.Request(url)
+    done = False
 
     while done is False:
         try:
-            response = urllib2.urlopen(req)
-            if response.getcode() == 200:
+            resp = urllib2.urlopen(req)
+            if resp.getcode() == 200:
                 done = True
         except Exception, err:
             if err.code == 400:
@@ -30,17 +30,18 @@ def request(url):
                 print '*** %s. Retrying...' % err
                 time.sleep(3)
 
-    return response.read()
+    return resp.read()
 
 
 def get_group_data():
     """Build the URL to ask for threads and comments data.
     """
     url = 'https://graph.facebook.com/v2.3/%s/feed?fields=' % GROUP_ID
-    url += 'id,created_time,from,message,type,likes.limit(0).summary(true),'
-    url += 'link,name,comments{id,created_time,from,message,comment_count,'
-    url += 'like_count,attachment,comments{id,created_time,from,message,'
-    url += 'like_count,attachment}}&limit=50&access_token=%s' % ACCESS_TOKEN
+    url += 'id,permalink_url,created_time,from,message,type,link,'
+    url += 'likes.limit(0).summary(true),comments{id,created_time,from,'
+    url += 'message,comment_count,like_count,attachment,comments{id,'
+    url += 'created_time,from,message,like_count,attachment}}'
+    url += '&limit=50&access_token=%s' % ACCESS_TOKEN
 
     return json.loads(request(url))
 
@@ -48,6 +49,9 @@ def get_group_data():
 def format_string(text):
     """Format a string in a good way.
     """
+    if text is None:
+        return ''
+
     return ' '.join(
         text.translate({
             0x2018: 0x27,
@@ -60,58 +64,46 @@ def format_string(text):
         }).encode('utf-8').split())
 
 
-def format_date(date, style):
+def format_date(date, short=True):
     """Format a date in the selected way.
     """
-    if style == 0:
-        return date.strftime('%Y-%m-%d %H:%M:%S')
-    elif style == 1:
-        return date.strftime('%H:%M:%S')
+    return date.strftime('%H:%M:%S') if short else \
+        date.strftime('%Y-%m-%d %H:%M:%S')
 
 
-def process_post(post, parent_id=''):
+def process_post(post, parent=''):
     """Process the data from a thread or a comment.
     """
-    post_id = post['id']
+    post_id = post.get('id', '-1')
     date = datetime.datetime.strptime(
         post['created_time'], '%Y-%m-%dT%H:%M:%S+0000')
-    author = format_string(post['from']['name'])
-    message = '' if 'message' not in post.keys() else \
-        format_string(post['message'])
+    author = format_string(post['from'].get('name', '?'))
+    message = format_string(post.get('message'))
 
     # If it's a thread
-    if parent_id == '':
-        parent_id = 'https://www.facebook.com/groups/%s/permalink/%s' % \
-            (GROUP_ID, post_id[len(GROUP_ID)+1:])
+    if parent == '':
+        parent = post['permalink_url']
         likes = post['likes']['summary']['total_count']
-        comments = 0 if 'comments' not in post.keys() else \
+        comments = 0 if 'comments' not in post else \
             len(post['comments']['data'])
         kind = post['type']
-        message += '' if 'link' not in post.keys() else \
-            ' [' + format_string(post['link']) + ']'
+        link = format_string(post.get('link'))
+
+        if link != '':
+            message += ' [' + link + ']'
 
     # If it's a comment
     else:
         likes = post['like_count']
-        comments = 0 if 'comment_count' not in post.keys() else \
-            post['comment_count']
-        kind = 'comment'
+        comments = post.get('comment_count', 0)
+        kind = 'comment' if 'comment_count' in post else 'subcomment'
 
-        if 'attachment' in post.keys():
-            if 'type' in post['attachment']:
-                kind = post['attachment']['type']
-
-            if kind.startswith('video'):
-                kind = 'video'
-            elif kind.endswith('image_share'):
-                kind = 'image'
-            elif kind == 'photo':
-                message += '' if 'url' not in post['attachment'] else \
-                    ' [' + format_string(post['attachment']['url']) + ']'
+        if 'attachment' in post:
+            kind += '_' + format_string(post['attachment'].get('type'))
 
     return (str(post_id),
-            str(parent_id),
-            format_date(date, 0),
+            str(parent),
+            format_date(date, False),
             author,
             message,
             kind,
@@ -124,15 +116,14 @@ def get_comments(thread, output):
     """
     num_comments = 0
     next_page = True
-    comments = None if 'comments' not in thread.keys() else thread['comments']
+    comments = thread.get('comments')
 
     while next_page and comments is not None:
-        for comment in comments['data']:
+        for comment in comments.get('data', []):
             output.writerow(process_post(comment, thread['id']))
 
             next_subpage = True
-            subcomments = None if 'comments' not in comment else \
-                comment['comments']
+            subcomments = comment.get('comments')
 
             while next_subpage and subcomments is not None:
                 for subcomment in subcomments['data']:
@@ -160,7 +151,7 @@ def write_csv():
     with open('%s_group.csv' % GROUP_ID, 'wb') as file_name:
         output = csv.writer(file_name)
         output.writerow(['id',
-                         'parent_id',
+                         'ref',
                          'date',
                          'author',
                          'message',
@@ -186,10 +177,10 @@ def write_csv():
                     break
                 elif num_threads % 50 == 0:
                     print '(%s) %s threads and %s comments processed' % \
-                        (format_date(datetime.datetime.now(), 1),
+                        (format_date(datetime.datetime.now()),
                          num_threads, num_comments)
 
-            if 'paging' in threads.keys() and not end:
+            if 'paging' in threads and not end:
                 threads = json.loads(request(threads['paging']['next']))
             else:
                 next_page = False
@@ -201,12 +192,12 @@ def main():
     """Main method.
     """
     print '\n(%s) Getting the last %d threads from Facebook group #%s\n' % \
-        (format_date(datetime.datetime.now(), 1), MAX_THREADS, GROUP_ID)
+        (format_date(datetime.datetime.now()), MAX_THREADS, GROUP_ID)
 
     num_threads, num_comments = write_csv()
 
     print '\n(%s) That\'s all! %s threads and %s comments in total\n' % \
-        (format_date(datetime.datetime.now(), 1), num_threads, num_comments)
+        (format_date(datetime.datetime.now()), num_threads, num_comments)
 
 
 if __name__ == '__main__':
