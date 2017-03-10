@@ -77,7 +77,7 @@ def process_post(post, parent=''):
     post_id = post.get('id', '-1')
     date = datetime.datetime.strptime(
         post['created_time'], '%Y-%m-%dT%H:%M:%S+0000')
-    author = format_string(post['from'].get('name', '?'))
+    author = format_string(post['from'].get('name'))
     message = format_string(post.get('message'))
 
     # If it's a thread
@@ -87,10 +87,12 @@ def process_post(post, parent=''):
         comments = 0 if 'comments' not in post else \
             len(post['comments']['data'])
         kind = post['type']
-        link = format_string(post.get('link'))
 
+        link = format_string(post.get('link'))
         if link != '':
-            message += ' [' + link + ']'
+            if message != '':
+                message += ' '
+            message += '[' + link + ']'
 
     # If it's a comment
     else:
