@@ -6,6 +6,7 @@
 import csv
 import datetime
 import json
+import socket
 import sys
 import time
 import urllib2
@@ -15,22 +16,17 @@ def request(url):
     """Try to open and read an URL.
     """
     req = urllib2.Request(url)
-    done = False
 
-    while done is False:
+    while True:
         try:
             resp = urllib2.urlopen(req)
-            if resp.getcode() == 200:
-                done = True
-        except Exception, err:
-            if err.code == 400:
-                print '*** Please, check the group id and the access token.\n'
-                sys.exit(2)
-            else:
-                print '*** %s. Retrying...' % err
-                time.sleep(3)
-
-    return resp.read()
+            return resp.read()
+        except urllib2.URLError, err:
+            if hasattr(err, 'code') and err.code == 400:
+                print '*** Please check the group id and the access token.\n'
+                raise err
+            print '*** %s. Retrying...' % err
+            time.sleep(5)
 
 
 def get_group_data():
@@ -41,7 +37,7 @@ def get_group_data():
     url += 'likes.limit(0).summary(true),comments{id,created_time,from,'
     url += 'message,comment_count,like_count,attachment,comments{id,'
     url += 'created_time,from,message,like_count,attachment}}'
-    url += '&limit=50&access_token=%s' % ACCESS_TOKEN
+    url += '&limit=100&access_token=%s' % ACCESS_TOKEN
 
     return json.loads(request(url))
 
