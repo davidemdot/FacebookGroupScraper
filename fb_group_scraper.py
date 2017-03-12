@@ -6,7 +6,6 @@
 import csv
 import datetime
 import json
-import socket
 import sys
 import time
 import urllib2
@@ -71,18 +70,19 @@ def process_post(post, parent=''):
     """Process the data from a thread or a comment.
     """
     post_id = post.get('id', '-1')
-    date = datetime.datetime.strptime(
+    date = '' if 'created_time' not in post else datetime.datetime.strptime(
         post['created_time'], '%Y-%m-%dT%H:%M:%S+0000')
     author = format_string(post['from'].get('name'))
     message = format_string(post.get('message'))
 
     # If it's a thread
     if parent == '':
-        parent = post['permalink_url']
-        likes = post['likes']['summary']['total_count']
+        parent = format_string(post.get('permalink_url'))
+        likes = 0 if 'likes' not in post else \
+            post['likes']['summary']['total_count']
         comments = 0 if 'comments' not in post else \
             len(post['comments']['data'])
-        kind = post['type']
+        kind = format_string(post.get('type'))
 
         link = format_string(post.get('link'))
         if link != '':
@@ -92,7 +92,7 @@ def process_post(post, parent=''):
 
     # If it's a comment
     else:
-        likes = post['like_count']
+        likes = post.get('like_count', 0)
         comments = post.get('comment_count', 0)
         kind = 'comment' if 'comment_count' in post else 'subcomment'
 
