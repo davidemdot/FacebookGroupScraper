@@ -72,7 +72,8 @@ def process_post(post, parent=''):
     post_id = post.get('id', '-1')
     date = '' if 'created_time' not in post else datetime.datetime.strptime(
         post['created_time'], '%Y-%m-%dT%H:%M:%S+0000')
-    author = format_string(post['from'].get('name'))
+    author = '' if 'from' not in post else \
+        format_string(post['from'].get('name'))
     message = format_string(post.get('message'))
 
     # If it's a thread
