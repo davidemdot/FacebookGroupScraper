@@ -1,3 +1,7 @@
+**Due to the disappearance of the version 2.3 of the Facebook API, it is no longer possible to get the data of those groups in which you are not admin.**
+
+---
+
 # Facebook Group Scraper
 Save in a CSV file threads with their comments, and associated data, of a Facebook group (**even closed groups where you are not an admin** but a member).
 
